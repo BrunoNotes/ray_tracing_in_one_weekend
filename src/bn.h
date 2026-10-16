@@ -142,6 +142,18 @@ bn_vec2Prototype(f64);
 bn_vec3Prototype(f32);
 bn_vec3Prototype(f64);
 
+Vec3f32 vec3f32Add(Vec3f32 u, Vec3f32 v);
+Vec3f32 vec3f32AddScalar(Vec3f32 u, f32 s);
+Vec3f32 vec3f32Sub(Vec3f32 u, Vec3f32 v);
+Vec3f32 vec3f32Mult(Vec3f32 u, Vec3f32 v);
+Vec3f32 vec3f32MultScalar(Vec3f32 u, f32 s);
+Vec3f32 vec3f32DivScalar(Vec3f32 u, f32 s);
+f32 vec3f32LengthSquared(Vec3f32 v);
+f32 vec3f32Length(Vec3f32 v);
+Vec3f32 vec3f32UnitVector(Vec3f32 v);
+f32 vec3f32Dot(Vec3f32 u, Vec3f32 v);
+Vec3f32 vec3f32Cross(Vec3f32 u, Vec3f32 v);
+
 #define bn_vec4Prototype(T)                                                    \
     typedef union U_Vec4##T {                                                  \
         T elements[4];                                                         \

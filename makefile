@@ -1,7 +1,7 @@
 config ?= debug
 # config ?= release
 
-CC := cc
+CC := clang
 CFLAGS := -Wall -Wextra -lm
 DEBUG_FLAGS := -DDEBUG -g
 RELEASE_FLAGS := -DNDEBUG -O3
