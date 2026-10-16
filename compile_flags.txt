@@ -1,0 +1,2 @@
+-DDebug
+-DBN_IMPLEMENTATION

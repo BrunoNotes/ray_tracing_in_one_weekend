@@ -1,0 +1,12 @@
+---
+Language:        Cpp
+AllowShortFunctionsOnASingleLine: None
+ColumnLimit: 80
+IndentWidth: 4
+UseTab: Never
+PointerAlignment: Left
+SortIncludes: false
+BreakBeforeBraces: Attach
+AlignAfterOpenBracket: BlockIndent
+BinPackParameters: false
+AllowAllParametersOfDeclarationOnNextLine: true
