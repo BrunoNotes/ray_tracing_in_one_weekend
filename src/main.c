@@ -21,15 +21,15 @@ Point3 rayAt(Ray* ray, f32 t) {
 
 f32 hitSphere(const Point3* center, f32 radius, const Ray* r) {
     Vec3f32 oc = vec3f32Sub(*center, r->origin);
-    f32 a = vec3f32Dot(r->direction, r->direction);
-    f32 b = -2.0 * vec3f32Dot(r->direction, oc);
-    f32 c = vec3f32Dot(oc, oc) - radius * radius;
-    f32 discrimant = b * b - 4 * a * c;
+    f32 a = vec3f32LengthSquared(r->direction);
+    f32 h = vec3f32Dot(r->direction, oc);
+    f32 c = vec3f32LengthSquared(oc) - radius * radius;
+    f32 discrimant = h * h - a * c;
 
     if (discrimant < 0)
         return -1.0;
     else
-        return (-b - sqrt(discrimant)) / (2.0 * a);
+        return (h - sqrt(discrimant)) / a;
 }
 
 Color rayColor(Ray* r) {
