@@ -1,6 +1,12 @@
 #define BN_IMPLEMENTATION
 #include "bn.h"
 
+/*
+   https://raytracing.github.io/books/RayTracingInOneWeekend.html
+
+   stoped at: 5.Adding a Sphere
+*/
+
 typedef Vec3f32 Point3;
 typedef Vec3f32 Color;
 
@@ -13,7 +19,19 @@ Point3 rayAt(Ray* ray, f32 t) {
     return vec3f32Add(ray->origin, vec3f32MultScalar(ray->direction, t));
 }
 
+bool hitSphere(const Point3* center, f32 radius, const Ray* r) {
+    Vec3f32 oc = vec3f32Sub(*center, r->origin);
+    f32 a = vec3f32Dot(r->direction, r->direction);
+    f32 b = -2.0 * vec3f32Dot(r->direction, oc);
+    f32 c = vec3f32Dot(oc, oc) - radius * radius;
+    f32 discrimant = b * b - 4 * a * c;
+    return (discrimant >= 0);
+}
+
 Color rayColor(const Ray* r) {
+    if (hitSphere(&(Point3){.x = 0.0, .y = 0.0, .z = -1.0}, 0.5, r))
+        return (Color){.x = 1.0, .y = 0.0, .z = 0.0};
+
     Vec3f32 unit_direction = vec3f32UnitVector(r->direction);
     f32 a = 0.5 * (unit_direction.y + 1.0);
 
@@ -88,7 +106,7 @@ int main(void) {
     fprintf(f_ptr, "255\n");
 
     for (i32 j = 0; j < img_height; j++) {
-        bn_logInfof("Scanlines remaining: %d", (img_height - j));
+        bn_logInfof("Scanlines remaining: %d %d", (img_height - j));
         for (i32 i = 0; i < img_width; i++) {
             Vec3f32 pixel_center = vec3f32Add(
                 vec3f32Add(pixel00_loc, vec3f32MultScalar(pixel_delta_u, i)),
@@ -102,9 +120,9 @@ int main(void) {
             writeColor(f_ptr, &pixel_color);
         }
     }
-    bn_logInfof("Done");
-
     fclose(f_ptr);
+
+    bn_logInfof("Done");
 
     bn_destroyContext();
     return 0;

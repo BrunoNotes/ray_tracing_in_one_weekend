@@ -11,12 +11,12 @@ References:
 #define BN_IMPLEMENTATION
 #include "bn.h"
 
-// This library uses a global context called bn_context that must be initialized
+// This library uses a global context called bn_ctx that must be initialized
 bn_initContext(BN_DEFAULT_CONTEXT_PARAMS);
 
-// the bn_context contains a temp_allocator, that is basically a arena allocator
+// the bn_ctx contains a temp_allocator, that is basically a arena allocator
 // that must be freed by the user, at the end of a main loop for example
-bn_allocatorFreeAll(&bn_context->temp_allocator);
+bn_allocatorFreeAll(&bn_ctx->temp_allocator);
 
 // (optional) destroy context
 bn_destroyContext();
@@ -140,7 +140,6 @@ bn_vec2Prototype(f64);
     } Vec3##T;
 
 bn_vec3Prototype(f32);
-bn_vec3Prototype(f64);
 
 Vec3f32 vec3f32Add(Vec3f32 u, Vec3f32 v);
 Vec3f32 vec3f32AddScalar(Vec3f32 u, f32 s);
@@ -153,6 +152,8 @@ f32 vec3f32Length(Vec3f32 v);
 Vec3f32 vec3f32UnitVector(Vec3f32 v);
 f32 vec3f32Dot(Vec3f32 u, Vec3f32 v);
 Vec3f32 vec3f32Cross(Vec3f32 u, Vec3f32 v);
+
+bn_vec3Prototype(f64);
 
 #define bn_vec4Prototype(T)                                                    \
     typedef union U_Vec4##T {                                                  \
@@ -535,7 +536,7 @@ typedef struct {
     }
 
 // only used to initialize the context on the heap
-static thread_local BN_Context* bn_context = {0};
+static thread_local BN_Context* bn_ctx = NULL;
 
 void bn_initContext(BN_ContextInitParams params);
 void bn_destroyContext();
@@ -577,7 +578,7 @@ void bn_destroyContext();
 #define BN_ANSI_PURPLE BN_ANSI_CSI "35" BN_ANSI_SGR
 
 void bn_defaultLogHandler(BN_LogOpts opts, const char* fmt, va_list args) {
-    if (opts.level < bn_context->log_opts.level)
+    if (opts.level < bn_ctx->log_opts.level)
         return;
 
     if (!opts.enable)
@@ -632,19 +633,19 @@ void bn_defaultLogHandler(BN_LogOpts opts, const char* fmt, va_list args) {
 }
 
 void bn_log(BN_LogLevel level, const char* fmt, ...) {
-    if (bn_context == NULL)
+    if (bn_ctx == NULL)
         return;
-    if (bn_context->log_handler == NULL)
+    if (bn_ctx->log_handler == NULL)
         return;
 
     va_list args;
     va_start(args, fmt);
 
-    bn_context->log_handler(
+    bn_ctx->log_handler(
         (BN_LogOpts){
             .level = level,
-            .terminal_colors = bn_context->log_opts.terminal_colors,
-            .enable = bn_context->log_opts.enable,
+            .terminal_colors = bn_ctx->log_opts.terminal_colors,
+            .enable = bn_ctx->log_opts.enable,
         },
         fmt, args
     );
@@ -1212,15 +1213,13 @@ Vec3f32 vec3f32Cross(Vec3f32 u, Vec3f32 v) {
     };
 }
 
-// static thread_local BN_Allocator _bn_context_allocator = {0};
-
 void bn_initContext(BN_ContextInitParams params) {
-    bn_context = bn_heapAllocatorPush(sizeof(BN_Context), false);
+    bn_ctx = bn_heapAllocatorPush(sizeof(BN_Context), false);
 
-    bn_context->log_opts = params.log_opts;
+    bn_ctx->log_opts = params.log_opts;
 
     if (params.log_handler == NULL) {
-        bn_context->log_handler = &bn_defaultLogHandler;
+        bn_ctx->log_handler = &bn_defaultLogHandler;
         bn_logDebugf("BN: default log handler loaded");
     }
 
@@ -1230,9 +1229,9 @@ void bn_initContext(BN_ContextInitParams params) {
     bn_logDebugf("BN: allocator backend: malloc");
 #endif
 
-    bn_context->allocator = bn_initAllocator(params.allocator_params);
+    bn_ctx->allocator = bn_initAllocator(params.allocator_params);
 
-    bn_context->temp_allocator = bn_initAllocator((BN_AllocatorInitParams){
+    bn_ctx->temp_allocator = bn_initAllocator((BN_AllocatorInitParams){
         .reserve_size = Byte * 8,
         .commit_size = Byte * 8,
         .type = BN_AllocatorType_TempAllocator,
@@ -1240,12 +1239,15 @@ void bn_initContext(BN_ContextInitParams params) {
 }
 
 void bn_destroyContext() {
-    bn_destroyAllocator(&bn_context->temp_allocator);
-    bn_destroyAllocator(&bn_context->allocator);
+    if (bn_ctx == NULL)
+        return;
+
+    bn_destroyAllocator(&bn_ctx->temp_allocator);
+    bn_destroyAllocator(&bn_ctx->allocator);
 
     bn_logDebugf("BN: destroying context");
 
-    bn_heapAllocatorFree(bn_context, sizeof(BN_Context));
+    bn_heapAllocatorFree(bn_ctx, sizeof(BN_Context));
 }
 
 #endif

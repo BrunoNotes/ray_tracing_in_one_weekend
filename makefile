@@ -3,7 +3,7 @@ config ?= debug
 
 CC := clang
 CFLAGS := -Wall -Wextra -lm
-DEBUG_FLAGS := -DDEBUG -g
+DEBUG_FLAGS := -DDEBUG -g -fsanitize=address
 RELEASE_FLAGS := -DNDEBUG -O3
 IFLAGS := -I./vendor/include
 
