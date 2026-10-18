@@ -19,18 +19,30 @@ Point3 rayAt(Ray* ray, f32 t) {
     return vec3f32Add(ray->origin, vec3f32MultScalar(ray->direction, t));
 }
 
-bool hitSphere(const Point3* center, f32 radius, const Ray* r) {
+f32 hitSphere(const Point3* center, f32 radius, const Ray* r) {
     Vec3f32 oc = vec3f32Sub(*center, r->origin);
     f32 a = vec3f32Dot(r->direction, r->direction);
     f32 b = -2.0 * vec3f32Dot(r->direction, oc);
     f32 c = vec3f32Dot(oc, oc) - radius * radius;
     f32 discrimant = b * b - 4 * a * c;
-    return (discrimant >= 0);
+
+    if (discrimant < 0)
+        return -1.0;
+    else
+        return (-b - sqrt(discrimant)) / (2.0 * a);
 }
 
-Color rayColor(const Ray* r) {
-    if (hitSphere(&(Point3){.x = 0.0, .y = 0.0, .z = -1.0}, 0.5, r))
-        return (Color){.x = 1.0, .y = 0.0, .z = 0.0};
+Color rayColor(Ray* r) {
+    f32 t = hitSphere(&(Point3){.x = 0.0, .y = 0.0, .z = -1.0}, 0.5, r);
+
+    if (t > 0.0) {
+        Vec3f32 n = vec3f32UnitVector(
+            vec3f32Sub(rayAt(r, t), (Vec3f32){.x = 0.0, .y = 0.0, .z = -1.0})
+        );
+        return vec3f32MultScalar(
+            (Color){.x = n.x + 1.0, .y = n.y + 1.0, .z = n.z + 1.0}, 0.5
+        );
+    }
 
     Vec3f32 unit_direction = vec3f32UnitVector(r->direction);
     f32 a = 0.5 * (unit_direction.y + 1.0);
@@ -57,7 +69,7 @@ void writeColor(FILE* f_ptr, Color* pixel_color) {
 }
 
 int main(void) {
-    bn_initContext(BN_DEFAULT_CONTEXT_PARAMS);
+    bn_initCxt(BN_DEFAULT_CONTEXT_PARAMS);
 
     // image
     f32 aspect_ratio = 16.0 / 9.0;
@@ -124,6 +136,6 @@ int main(void) {
 
     bn_logInfof("Done");
 
-    bn_destroyContext();
+    bn_destroyCtx();
     return 0;
 }

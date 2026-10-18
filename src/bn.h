@@ -5,21 +5,23 @@ BrunoNotes C helper lib
 
 References:
 - nob.h (https://github.com/tsoding/nob.h)
-- odin (https://odin-lang.org)
-- gb.h (https://github.com/gingerBill/gb)
-
+- odin (https://odin-lang.org) - gb.h (https://github.com/gingerBill/gb)
 #define BN_IMPLEMENTATION
 #include "bn.h"
 
-// This library uses a global context called bn_ctx that must be initialized
-bn_initContext(BN_DEFAULT_CONTEXT_PARAMS);
+This library uses a global context called bn_ctx that must be initialized if
+used, for example to change the log options.
 
-// the bn_ctx contains a temp_allocator, that is basically a arena allocator
-// that must be freed by the user, at the end of a main loop for example
-bn_allocatorFreeAll(&bn_ctx->temp_allocator);
+    bn_initCxt(BN_DEFAULT_CONTEXT_PARAMS);
 
-// (optional) destroy context
-bn_destroyContext();
+the bn_ctx contains a temp_allocator, that is basically a arena allocator
+that must be freed by the user, at the end of a main loop for example
+
+    bn_allocatorFreeAll(&bn_ctx->temp_allocator);
+
+(optional) destroy context
+
+    bn_destroyCxt();
 
 */
 
@@ -538,8 +540,8 @@ typedef struct {
 // only used to initialize the context on the heap
 static thread_local BN_Context* bn_ctx = NULL;
 
-void bn_initContext(BN_ContextInitParams params);
-void bn_destroyContext();
+void bn_initCxt(BN_ContextInitParams params);
+void bn_destroyCtx();
 
 // ----------------------------------------------------------------------------
 // init BN_IMPLEMENTATION
@@ -578,8 +580,13 @@ void bn_destroyContext();
 #define BN_ANSI_PURPLE BN_ANSI_CSI "35" BN_ANSI_SGR
 
 void bn_defaultLogHandler(BN_LogOpts opts, const char* fmt, va_list args) {
-    if (opts.level < bn_ctx->log_opts.level)
-        return;
+    if (bn_ctx != NULL) {
+        if (opts.level < bn_ctx->log_opts.level)
+            return;
+    } else {
+        if (opts.level < BN_LogLevel_Info)
+            return;
+    }
 
     if (!opts.enable)
         return;
@@ -633,22 +640,28 @@ void bn_defaultLogHandler(BN_LogOpts opts, const char* fmt, va_list args) {
 }
 
 void bn_log(BN_LogLevel level, const char* fmt, ...) {
-    if (bn_ctx == NULL)
-        return;
-    if (bn_ctx->log_handler == NULL)
-        return;
-
     va_list args;
     va_start(args, fmt);
 
-    bn_ctx->log_handler(
-        (BN_LogOpts){
-            .level = level,
-            .terminal_colors = bn_ctx->log_opts.terminal_colors,
-            .enable = bn_ctx->log_opts.enable,
-        },
-        fmt, args
-    );
+    if (bn_ctx != NULL && bn_ctx->log_handler != NULL) {
+        bn_ctx->log_handler(
+            (BN_LogOpts){
+                .level = level,
+                .terminal_colors = bn_ctx->log_opts.terminal_colors,
+                .enable = bn_ctx->log_opts.enable,
+            },
+            fmt, args
+        );
+    } else {
+        bn_defaultLogHandler(
+            (BN_LogOpts){
+                .level = level,
+                .terminal_colors = BN_IS_TERMINAL,
+                .enable = true,
+            },
+            fmt, args
+        );
+    }
 
     va_end(args);
 }
@@ -1213,7 +1226,10 @@ Vec3f32 vec3f32Cross(Vec3f32 u, Vec3f32 v) {
     };
 }
 
-void bn_initContext(BN_ContextInitParams params) {
+void bn_initCxt(BN_ContextInitParams params) {
+    if (bn_ctx != NULL)
+        return;
+
     bn_ctx = bn_heapAllocatorPush(sizeof(BN_Context), false);
 
     bn_ctx->log_opts = params.log_opts;
@@ -1221,6 +1237,8 @@ void bn_initContext(BN_ContextInitParams params) {
     if (params.log_handler == NULL) {
         bn_ctx->log_handler = &bn_defaultLogHandler;
         bn_logDebugf("BN: default log handler loaded");
+    } else {
+        bn_ctx->log_handler = params.log_handler;
     }
 
 #if defined(BN_ALLOCATOR_BACKEND_VIRTUAL_MEMORY)
@@ -1238,7 +1256,7 @@ void bn_initContext(BN_ContextInitParams params) {
     });
 }
 
-void bn_destroyContext() {
+void bn_destroyCtx() {
     if (bn_ctx == NULL)
         return;
 
