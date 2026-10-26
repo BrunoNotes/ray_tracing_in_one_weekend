@@ -111,7 +111,11 @@ int main(void) {
     // render
     // https://en.wikipedia.org/wiki/Netpbm
     FILE* f_ptr;
+#if defined(BN_PLATFORM_WINDOWS)
+    fopen_s(&f_ptr, "image.ppm", "w");
+#else
     f_ptr = fopen("image.ppm", "w");
+#endif
 
     fprintf(f_ptr, "P3\n");
     fprintf(f_ptr, "%d %d\n", img_width, img_height);
