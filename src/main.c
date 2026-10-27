@@ -4,7 +4,7 @@
 /*
    https://raytracing.github.io/books/RayTracingInOneWeekend.html
 
-   stoped at: 5.Adding a Sphere
+   stoped at: 6.4. Front Faces Versus Back Faces
 */
 
 typedef Vec3f32 Point3;
@@ -19,6 +19,24 @@ Point3 rayAt(Ray* ray, f32 t) {
     return vec3f32Add(ray->origin, vec3f32MultScalar(ray->direction, t));
 }
 
+typedef struct {
+    Point3 p;
+    Vec3f32 normal;
+    f32 t;
+    bool front_face;
+} hitRecord;
+
+void hitRecordSetFaceNormal(
+    hitRecord* hr, const Ray* r, const Vec3f32* outward_normal
+) {
+    // Sets the hit record normal vector.
+    // NOTE: the parameter `outward_normal` is assumed to have unit length.
+
+    hr->front_face = vec3f32Dot(r->direction, *outward_normal) < 0;
+    hr->normal =
+        hr->front_face ? *outward_normal : vec3f32Negative(*outward_normal);
+}
+
 f32 hitSphere(const Point3* center, f32 radius, const Ray* r) {
     Vec3f32 oc = vec3f32Sub(*center, r->origin);
     f32 a = vec3f32LengthSquared(r->direction);
@@ -30,6 +48,46 @@ f32 hitSphere(const Point3* center, f32 radius, const Ray* r) {
         return -1.0;
     else
         return (h - sqrt(discrimant)) / a;
+}
+
+bool _hitSphere(
+    Ray* r,
+    const Point3* center,
+    f32 radius,
+    f32 ray_tmin,
+    f32 ray_tmax,
+    hitRecord* rec
+) {
+    Vec3f32 oc = vec3f32Sub(*center, r->origin);
+    f32 a = vec3f32LengthSquared(r->direction);
+    f32 h = vec3f32Dot(r->direction, oc);
+    f32 c = vec3f32LengthSquared(oc) - radius * radius;
+
+    f32 discrimant = h * h - a * c;
+
+    if (discrimant < 0)
+        false;
+
+    f32 sqrtd = sqrt(discrimant);
+
+    // Find the nearest root that lies in the acceptable range.
+    f32 root = (h - sqrtd) / a;
+    if (root <= ray_tmin || ray_tmax <= root) {
+        root = (h + sqrtd) / a;
+        if (root <= ray_tmin || ray_tmax <= root)
+            return false;
+    }
+
+    rec->t = root;
+    rec->p = rayAt(r, rec->t);
+    rec->normal = vec3f32DivScalar(vec3f32Sub(rec->p, *center), radius);
+
+    Vec3f32 outward_normal =
+        vec3f32DivScalar(vec3f32Sub(rec->p, *center), radius);
+
+    hitRecordSetFaceNormal(rec, r, &outward_normal);
+
+    return true;
 }
 
 Color rayColor(Ray* r) {

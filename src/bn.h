@@ -154,6 +154,7 @@ f32 vec3f32Length(Vec3f32 v);
 Vec3f32 vec3f32UnitVector(Vec3f32 v);
 f32 vec3f32Dot(Vec3f32 u, Vec3f32 v);
 Vec3f32 vec3f32Cross(Vec3f32 u, Vec3f32 v);
+Vec3f32 vec3f32Negative(Vec3f32 v);
 
 bn_vec3Prototype(f64);
 
@@ -1223,6 +1224,14 @@ f32 vec3f32Dot(Vec3f32 u, Vec3f32 v) {
 Vec3f32 vec3f32Cross(Vec3f32 u, Vec3f32 v) {
     return (Vec3f32){
         {u.y * v.z - u.z * v.y, u.z * v.x - u.x * v.z, u.x * v.y - u.y * v.x}
+    };
+}
+
+Vec3f32 vec3f32Negative(Vec3f32 v) {
+    return (Vec3f32){
+        .x = -v.x,
+        .y = -v.y,
+        .z = -v.z,
     };
 }
 
