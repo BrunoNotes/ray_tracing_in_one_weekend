@@ -4,7 +4,7 @@
 /*
    https://raytracing.github.io/books/RayTracingInOneWeekend.html
 
-   stoped at: 6.5. A List of Hittable Objects
+   stoped at: 6.7. Common Constants and Utility Functions
 */
 
 const f32 infinity = INFINITY;
@@ -65,7 +65,7 @@ bool hitRecordHit(Ray* r, f32 ray_tmin, f32 ray_tmax, HitRecord* rec) {
         f32 discrimant = h * h - a * c;
 
         if (discrimant < 0)
-            false;
+            return false;
 
         f32 sqrtd = sqrt(discrimant);
 
@@ -106,10 +106,11 @@ bool hitRecordHitArray(
     f32 closest_so_far = ray_tmax;
 
     for (u32 i = 0; i < objects->length; i++) {
+        temp_rec = objects->items[i];
         if (hitRecordHit(r, ray_tmin, ray_tmax, &temp_rec)) {
             hit_anything = true;
             closest_so_far = temp_rec.t;
-            rec = &temp_rec;
+            *rec = temp_rec;
         }
     }
 
@@ -162,19 +163,19 @@ int main(void) {
     // World
     BN_arrayHitRecord world = bn_daInit();
 
-    HitRecord sphere_1 = {
-        .center = (Point3){.x = 0.0, .y = 0.0, .z = -1.0},
-        .radius = 0.5,
-        .type = HitRecordType_Sphere
-    };
-    bn_daAppend(&world, sphere_1, &bn_ctx->allocator);
-
-    HitRecord sphere_2 = {
+    HitRecord sphere = (HitRecord){
         .center = (Point3){.x = 0.0, .y = -100.5, .z = -1.0},
         .radius = 100.0,
         .type = HitRecordType_Sphere
     };
-    bn_daAppend(&world, sphere_2, &bn_ctx->allocator);
+    bn_daAppend(&world, sphere, &bn_ctx->allocator);
+
+    sphere = (HitRecord){
+        .center = (Point3){.x = 0.0, .y = 0.0, .z = -1.0},
+        .radius = 0.5,
+        .type = HitRecordType_Sphere
+    };
+    bn_daAppend(&world, sphere, &bn_ctx->allocator);
 
     // Camera
     f32 focal_length = 1.0;
