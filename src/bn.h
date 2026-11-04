@@ -385,33 +385,33 @@ void bn_allocatorFreeAll(BN_Allocator* alloc);
 #define bnAllocPushArrayNZ(alloc, T, len)                                      \
     (T*)bn_allocatorPush((BN_AllocatorParams){sizeof(T) * (len), true}, (alloc))
 
-#define bn_dArrayPrototype(T)                                                  \
+#define bn_arrayPrototype(T)                                                  \
     typedef struct {                                                           \
         T* items;                                                              \
         u32 length;                                                            \
         u32 capacity;                                                          \
     } BN_array##T
 
-bn_dArrayPrototype(i8);
-bn_dArrayPrototype(i16);
-bn_dArrayPrototype(i32);
-bn_dArrayPrototype(i64);
-bn_dArrayPrototype(u8);
-bn_dArrayPrototype(u16);
-bn_dArrayPrototype(u32);
-bn_dArrayPrototype(u64);
-bn_dArrayPrototype(b8);
-bn_dArrayPrototype(b32);
-bn_dArrayPrototype(b64);
-bn_dArrayPrototype(f32);
-bn_dArrayPrototype(f64);
-bn_dArrayPrototype(String);
-bn_dArrayPrototype(Vec2f32);
-bn_dArrayPrototype(Vec2f64);
-bn_dArrayPrototype(Vec3f32);
-bn_dArrayPrototype(Vec3f64);
-bn_dArrayPrototype(Vec4f32);
-bn_dArrayPrototype(Vec4f64);
+bn_arrayPrototype(i8);
+bn_arrayPrototype(i16);
+bn_arrayPrototype(i32);
+bn_arrayPrototype(i64);
+bn_arrayPrototype(u8);
+bn_arrayPrototype(u16);
+bn_arrayPrototype(u32);
+bn_arrayPrototype(u64);
+bn_arrayPrototype(b8);
+bn_arrayPrototype(b32);
+bn_arrayPrototype(b64);
+bn_arrayPrototype(f32);
+bn_arrayPrototype(f64);
+bn_arrayPrototype(String);
+bn_arrayPrototype(Vec2f32);
+bn_arrayPrototype(Vec2f64);
+bn_arrayPrototype(Vec3f32);
+bn_arrayPrototype(Vec3f64);
+bn_arrayPrototype(Vec4f32);
+bn_arrayPrototype(Vec4f64);
 
 #ifndef BN_DYNAMIC_ARRAY_INITIAL_CAPACITY
 #define BN_DYNAMIC_ARRAY_INITIAL_CAPACITY 256
@@ -984,6 +984,13 @@ BN_Allocator bn_initAllocator(BN_AllocatorInitParams params) {
         alloc.type = params.type;
         break;
     case BN_AllocatorType_TempAllocator:
+        if (params.reserve_size <= 0) {
+            params.reserve_size = Byte * 8;
+        }
+        if (params.commit_size <= 0) {
+            params.commit_size = Byte * 8;
+        }
+
         alloc.data = bn_initArena(
             params.reserve_size, params.commit_size, BN_ArenaType_Growing
         );
@@ -1259,8 +1266,6 @@ void bn_initCxt(BN_ContextInitParams params) {
     bn_ctx->allocator = bn_initAllocator(params.allocator_params);
 
     bn_ctx->temp_allocator = bn_initAllocator((BN_AllocatorInitParams){
-        .reserve_size = Byte * 8,
-        .commit_size = Byte * 8,
         .type = BN_AllocatorType_TempAllocator,
     });
 }

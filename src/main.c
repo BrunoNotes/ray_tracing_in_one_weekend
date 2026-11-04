@@ -4,8 +4,15 @@
 /*
    https://raytracing.github.io/books/RayTracingInOneWeekend.html
 
-   stoped at: 6.4. Front Faces Versus Back Faces
+   stoped at: 6.5. A List of Hittable Objects
 */
+
+const f32 infinity = INFINITY;
+const f32 pi = 3.1415926535897932385;
+
+inline f32 f32DegreesToRadians(f32 degrees) {
+    return degrees * pi / 180.0;
+}
 
 typedef Vec3f32 Point3;
 typedef Vec3f32 Color;
@@ -19,15 +26,25 @@ Point3 rayAt(Ray* ray, f32 t) {
     return vec3f32Add(ray->origin, vec3f32MultScalar(ray->direction, t));
 }
 
+typedef enum {
+    HitRecordType_Sphere,
+} HitRecordType;
+
 typedef struct {
     Point3 p;
     Vec3f32 normal;
     f32 t;
     bool front_face;
-} hitRecord;
+    HitRecordType type;
+
+    Point3 center; // for sphere
+    f32 radius;    // for sphere
+} HitRecord;
+
+bn_arrayPrototype(HitRecord);
 
 void hitRecordSetFaceNormal(
-    hitRecord* hr, const Ray* r, const Vec3f32* outward_normal
+    HitRecord* hr, const Ray* r, const Vec3f32* outward_normal
 ) {
     // Sets the hit record normal vector.
     // NOTE: the parameter `outward_normal` is assumed to have unit length.
@@ -37,68 +54,73 @@ void hitRecordSetFaceNormal(
         hr->front_face ? *outward_normal : vec3f32Negative(*outward_normal);
 }
 
-f32 hitSphere(const Point3* center, f32 radius, const Ray* r) {
-    Vec3f32 oc = vec3f32Sub(*center, r->origin);
-    f32 a = vec3f32LengthSquared(r->direction);
-    f32 h = vec3f32Dot(r->direction, oc);
-    f32 c = vec3f32LengthSquared(oc) - radius * radius;
-    f32 discrimant = h * h - a * c;
+bool hitRecordHit(Ray* r, f32 ray_tmin, f32 ray_tmax, HitRecord* rec) {
+    switch (rec->type) {
+    case HitRecordType_Sphere: {
+        Vec3f32 oc = vec3f32Sub(rec->center, r->origin);
+        f32 a = vec3f32LengthSquared(r->direction);
+        f32 h = vec3f32Dot(r->direction, oc);
+        f32 c = vec3f32LengthSquared(oc) - rec->radius * rec->radius;
 
-    if (discrimant < 0)
-        return -1.0;
-    else
-        return (h - sqrt(discrimant)) / a;
+        f32 discrimant = h * h - a * c;
+
+        if (discrimant < 0)
+            false;
+
+        f32 sqrtd = sqrt(discrimant);
+
+        // Find the nearest root that lies in the acceptable range.
+        f32 root = (h - sqrtd) / a;
+        if (root <= ray_tmin || ray_tmax <= root) {
+            root = (h + sqrtd) / a;
+            if (root <= ray_tmin || ray_tmax <= root)
+                return false;
+        }
+
+        rec->t = root;
+        rec->p = rayAt(r, rec->t);
+        rec->normal =
+            vec3f32DivScalar(vec3f32Sub(rec->p, rec->center), rec->radius);
+
+        Vec3f32 outward_normal =
+            vec3f32DivScalar(vec3f32Sub(rec->p, rec->center), rec->radius);
+
+        hitRecordSetFaceNormal(rec, r, &outward_normal);
+
+        return true;
+    } break;
+    default:
+        return false;
+    }
 }
 
-bool _hitSphere(
+bool hitRecordHitArray(
     Ray* r,
-    const Point3* center,
-    f32 radius,
     f32 ray_tmin,
     f32 ray_tmax,
-    hitRecord* rec
+    BN_arrayHitRecord* objects,
+    HitRecord* rec
 ) {
-    Vec3f32 oc = vec3f32Sub(*center, r->origin);
-    f32 a = vec3f32LengthSquared(r->direction);
-    f32 h = vec3f32Dot(r->direction, oc);
-    f32 c = vec3f32LengthSquared(oc) - radius * radius;
+    HitRecord temp_rec;
+    bool hit_anything = false;
+    f32 closest_so_far = ray_tmax;
 
-    f32 discrimant = h * h - a * c;
-
-    if (discrimant < 0)
-        false;
-
-    f32 sqrtd = sqrt(discrimant);
-
-    // Find the nearest root that lies in the acceptable range.
-    f32 root = (h - sqrtd) / a;
-    if (root <= ray_tmin || ray_tmax <= root) {
-        root = (h + sqrtd) / a;
-        if (root <= ray_tmin || ray_tmax <= root)
-            return false;
+    for (u32 i = 0; i < objects->length; i++) {
+        if (hitRecordHit(r, ray_tmin, ray_tmax, &temp_rec)) {
+            hit_anything = true;
+            closest_so_far = temp_rec.t;
+            rec = &temp_rec;
+        }
     }
 
-    rec->t = root;
-    rec->p = rayAt(r, rec->t);
-    rec->normal = vec3f32DivScalar(vec3f32Sub(rec->p, *center), radius);
-
-    Vec3f32 outward_normal =
-        vec3f32DivScalar(vec3f32Sub(rec->p, *center), radius);
-
-    hitRecordSetFaceNormal(rec, r, &outward_normal);
-
-    return true;
+    return hit_anything;
 }
 
-Color rayColor(Ray* r) {
-    f32 t = hitSphere(&(Point3){.x = 0.0, .y = 0.0, .z = -1.0}, 0.5, r);
-
-    if (t > 0.0) {
-        Vec3f32 n = vec3f32UnitVector(
-            vec3f32Sub(rayAt(r, t), (Vec3f32){.x = 0.0, .y = 0.0, .z = -1.0})
-        );
+Color rayColor(Ray* r, BN_arrayHitRecord* world) {
+    HitRecord rec;
+    if (hitRecordHitArray(r, 0, infinity, world, &rec)) {
         return vec3f32MultScalar(
-            (Color){.x = n.x + 1.0, .y = n.y + 1.0, .z = n.z + 1.0}, 0.5
+            vec3f32Add(rec.normal, (Color){.r = 1.0, .g = 1.0, .b = 1.0}), 0.5
         );
     }
 
@@ -136,6 +158,23 @@ int main(void) {
     // Calculate the image height, and ensure that it's at least 1.
     i32 img_height = (i32)(img_width / aspect_ratio);
     img_height = (img_height < 1) ? 1 : img_height;
+
+    // World
+    BN_arrayHitRecord world = bn_daInit();
+
+    HitRecord sphere_1 = {
+        .center = (Point3){.x = 0.0, .y = 0.0, .z = -1.0},
+        .radius = 0.5,
+        .type = HitRecordType_Sphere
+    };
+    bn_daAppend(&world, sphere_1, &bn_ctx->allocator);
+
+    HitRecord sphere_2 = {
+        .center = (Point3){.x = 0.0, .y = -100.5, .z = -1.0},
+        .radius = 100.0,
+        .type = HitRecordType_Sphere
+    };
+    bn_daAppend(&world, sphere_2, &bn_ctx->allocator);
 
     // Camera
     f32 focal_length = 1.0;
@@ -189,8 +228,7 @@ int main(void) {
             Vec3f32 ray_direction = vec3f32Sub(pixel_center, camera_center);
             Ray r = {camera_center, ray_direction};
 
-            Vec3f32 pixel_color = rayColor(&r);
-
+            Vec3f32 pixel_color = rayColor(&r, &world);
             writeColor(f_ptr, &pixel_color);
         }
     }
