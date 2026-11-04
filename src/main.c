@@ -107,7 +107,7 @@ bool hitRecordHitArray(
 
     for (u32 i = 0; i < objects->length; i++) {
         temp_rec = objects->items[i];
-        if (hitRecordHit(r, ray_tmin, ray_tmax, &temp_rec)) {
+        if (hitRecordHit(r, ray_tmin, closest_so_far, &temp_rec)) {
             hit_anything = true;
             closest_so_far = temp_rec.t;
             *rec = temp_rec;
@@ -164,15 +164,15 @@ int main(void) {
     BN_arrayHitRecord world = bn_daInit();
 
     HitRecord sphere = (HitRecord){
-        .center = (Point3){.x = 0.0, .y = -100.5, .z = -1.0},
-        .radius = 100.0,
+        .center = (Point3){.x = 0.0, .y = 0.0, .z = -1.0},
+        .radius = 0.5,
         .type = HitRecordType_Sphere
     };
     bn_daAppend(&world, sphere, &bn_ctx->allocator);
 
     sphere = (HitRecord){
-        .center = (Point3){.x = 0.0, .y = 0.0, .z = -1.0},
-        .radius = 0.5,
+        .center = (Point3){.x = 0.0, .y = -100.5, .z = -1.0},
+        .radius = 100.0,
         .type = HitRecordType_Sphere
     };
     bn_daAppend(&world, sphere, &bn_ctx->allocator);
