@@ -94,7 +94,8 @@ int main(void) {
     fprintf(f_ptr, "255\n");
 
     for (i32 j = 0; j < img_height; j++) {
-        bn_logInfof("Scanlines remaining: %d %d", (img_height - j));
+        i32 pct = (j * 100) / img_height;
+        bn_logInfof("Scanlines remaining: %d (%d%%)", (img_height - j), pct);
         for (i32 i = 0; i < img_width; i++) {
             Vec3f32 pixel_center = vec3f32Add(
                 vec3f32Add(pixel00_loc, vec3f32MultScalar(pixel_delta_u, i)),
@@ -107,9 +108,9 @@ int main(void) {
             writeColor(f_ptr, &pixel_color);
         }
     }
-    fclose(f_ptr);
-
     bn_logInfof("Done");
+
+    fclose(f_ptr);
 
     bn_destroyCtx();
     return 0;
