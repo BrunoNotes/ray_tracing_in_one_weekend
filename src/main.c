@@ -24,8 +24,9 @@ void writeColor(FILE* f_ptr, Color* pixel_color) {
 }
 
 int main(void) {
-    bn_initCxt(BN_DEFAULT_CONTEXT_PARAMS);
-
+    BN_Allocator allocator = bn_initAllocator((BN_AllocatorInitParams) {
+        .type = BN_AllocatorType_ArenaGrowing,
+    });
     // image
     f32 aspect_ratio = 16.0 / 9.0;
     i32 img_width = 400;
@@ -42,14 +43,14 @@ int main(void) {
         .radius = 0.5,
         .type = HitRecordType_Sphere
     };
-    bn_daAppend(&world, sphere, &bn_ctx->allocator);
+    bn_daAppend(&world, sphere, &allocator);
 
     sphere = (HitRecord){
         .center = (Point3){.x = 0.0, .y = -100.5, .z = -1.0},
         .radius = 100.0,
         .type = HitRecordType_Sphere
     };
-    bn_daAppend(&world, sphere, &bn_ctx->allocator);
+    bn_daAppend(&world, sphere, &allocator);
 
     // Camera
     f32 focal_length = 1.0;
@@ -112,6 +113,6 @@ int main(void) {
 
     fclose(f_ptr);
 
-    bn_destroyCtx();
+    bn_destroyAllocator(&allocator);
     return 0;
 }

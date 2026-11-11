@@ -5,24 +5,11 @@ BrunoNotes C helper lib
 
 References:
 - nob.h (https://github.com/tsoding/nob.h)
-- odin (https://odin-lang.org) - gb.h (https://github.com/gingerBill/gb)
+- odin (https://odin-lang.org)
+- gb.h (https://github.com/gingerBill/gb)
+
 #define BN_IMPLEMENTATION
 #include "bn.h"
-
-This library uses a global context called bn_ctx that must be initialized if
-used, for example to change the log options.
-
-    bn_initCxt(BN_DEFAULT_CONTEXT_PARAMS);
-
-the bn_ctx contains a temp_allocator, that is basically a arena allocator
-that must be freed by the user, at the end of a main loop for example
-
-    bn_allocatorFreeAll(&bn_ctx->temp_allocator);
-
-(optional) destroy context
-
-    bn_destroyCxt();
-
 */
 
 #define BN_ASSERT_ENABLED // comment to disable asserts
@@ -39,6 +26,8 @@ that must be freed by the user, at the end of a main loop for example
     #define BN_PLATFORM_OSX
 #elif defined(__linux__)
     #define BN_PLATFORM_LINUX
+#else
+    #error "BN: Platform not suported"
 #endif
 
 #if defined(DEBUG)
@@ -108,6 +97,44 @@ typedef float f32;
 typedef double f64;
 typedef size_t usize;
 typedef ptrdiff_t isize;
+
+#define u8_MIN 0u
+#define u8_MAX 0xffu
+#define i8_MIN (-0x7f - 1)
+#define i8_MAX 0x7f
+
+#define u16_MIN 0u
+#define u16_MAX 0xffffu
+#define i16_MIN (-0x7fff - 1)
+#define i16_MAX 0x7fff
+
+#define u32_MIN 0u
+#define u32_MAX 0xffffffffu
+#define i32_MIN (-0x7fffffff - 1)
+#define i32_MAX 0x7fffffff
+
+#define u64_MIN 0ull
+#define u64_MAX 0xffffffffffffffffull
+#define i64_MIN (-0x7fffffffffffffffll - 1)
+#define i64_MAX 0x7fffffffffffffffll
+
+#define f32_MIN 1.17549435e-38f
+#define f32_MAX 3.40282347e+38f
+
+#define f64_MIN 2.2250738585072014e-308
+#define f64_MAX 1.7976931348623157e+308
+
+#ifndef NULL
+#if defined(__cplusplus)
+#if __cplusplus >= 201103L
+#define NULL nullptr
+#else
+#define NULL 0
+#endif
+#else
+#define NULL ((void*)0)
+#endif
+#endif
 
 #define bn_vec2Prototype(T)                                                    \
     typedef union U_Vec2##T {                                                  \
@@ -257,6 +284,9 @@ void bn_log(BN_LogLevel level, const char* fmt, ...);
 #define bn_logFatal(message) bn_log(BN_LogLevel_Fatal, message)
 #define bn_logFatalf(...) bn_log(BN_LogLevel_Fatal, __VA_ARGS__)
 
+static BN_LogLevel bn_default_log_level = BN_LogLevel_Info;
+static BN_LogHandler* bn_logHandler = NULL;
+
 // clang-format off
 #if defined(BN_ASSERT_ENABLED)
     #define bn_assert(expr)                                                         \
@@ -385,7 +415,7 @@ void bn_allocatorFreeAll(BN_Allocator* alloc);
 #define bnAllocPushArrayNZ(alloc, T, len)                                      \
     (T*)bn_allocatorPush((BN_AllocatorParams){sizeof(T) * (len), true}, (alloc))
 
-#define bn_arrayPrototype(T)                                                  \
+#define bn_arrayPrototype(T)                                                   \
     typedef struct {                                                           \
         T* items;                                                              \
         u32 length;                                                            \
@@ -526,24 +556,6 @@ typedef struct {
     BN_LogOpts log_opts;
 } BN_ContextInitParams;
 
-#define BN_DEFAULT_CONTEXT_PARAMS                                              \
-    (BN_ContextInitParams) {                                                   \
-        .allocator_params =                                                    \
-            (BN_AllocatorInitParams){                                          \
-                .type = BN_AllocatorType_HeapAllocator,                        \
-            },                                                                 \
-        .log_opts = (BN_LogOpts) {                                             \
-            .level = BN_DEBUG ? BN_LogLevel_Debug : BN_LogLevel_Info,          \
-            .terminal_colors = BN_IS_TERMINAL, .enable = true,                 \
-        }                                                                      \
-    }
-
-// only used to initialize the context on the heap
-static thread_local BN_Context* bn_ctx = NULL;
-
-void bn_initCxt(BN_ContextInitParams params);
-void bn_destroyCtx();
-
 // ----------------------------------------------------------------------------
 // init BN_IMPLEMENTATION
 // ----------------------------------------------------------------------------
@@ -581,13 +593,8 @@ void bn_destroyCtx();
 #define BN_ANSI_PURPLE BN_ANSI_CSI "35" BN_ANSI_SGR
 
 void bn_defaultLogHandler(BN_LogOpts opts, const char* fmt, va_list args) {
-    if (bn_ctx != NULL) {
-        if (opts.level < bn_ctx->log_opts.level)
-            return;
-    } else {
-        if (opts.level < BN_LogLevel_Info)
-            return;
-    }
+    if (opts.level < bn_default_log_level)
+        return;
 
     if (!opts.enable)
         return;
@@ -644,12 +651,12 @@ void bn_log(BN_LogLevel level, const char* fmt, ...) {
     va_list args;
     va_start(args, fmt);
 
-    if (bn_ctx != NULL && bn_ctx->log_handler != NULL) {
-        bn_ctx->log_handler(
+    if (bn_logHandler != NULL) {
+        bn_logHandler(
             (BN_LogOpts){
                 .level = level,
-                .terminal_colors = bn_ctx->log_opts.terminal_colors,
-                .enable = bn_ctx->log_opts.enable,
+                .terminal_colors = BN_IS_TERMINAL,
+                .enable = true,
             },
             fmt, args
         );
@@ -1240,46 +1247,6 @@ Vec3f32 vec3f32Negative(Vec3f32 v) {
         .y = -v.y,
         .z = -v.z,
     };
-}
-
-void bn_initCxt(BN_ContextInitParams params) {
-    if (bn_ctx != NULL)
-        return;
-
-    bn_ctx = bn_heapAllocatorPush(sizeof(BN_Context), false);
-
-    bn_ctx->log_opts = params.log_opts;
-
-    if (params.log_handler == NULL) {
-        bn_ctx->log_handler = &bn_defaultLogHandler;
-        bn_logDebugf("BN: default log handler loaded");
-    } else {
-        bn_ctx->log_handler = params.log_handler;
-    }
-
-#if defined(BN_ALLOCATOR_BACKEND_VIRTUAL_MEMORY)
-    bn_logDebugf("BN: allocator backend: virtual memory");
-#elif defined(BN_ALLOCATOR_BACKEND_MALLOC)
-    bn_logDebugf("BN: allocator backend: malloc");
-#endif
-
-    bn_ctx->allocator = bn_initAllocator(params.allocator_params);
-
-    bn_ctx->temp_allocator = bn_initAllocator((BN_AllocatorInitParams){
-        .type = BN_AllocatorType_TempAllocator,
-    });
-}
-
-void bn_destroyCtx() {
-    if (bn_ctx == NULL)
-        return;
-
-    bn_destroyAllocator(&bn_ctx->temp_allocator);
-    bn_destroyAllocator(&bn_ctx->allocator);
-
-    bn_logDebugf("BN: destroying context");
-
-    bn_heapAllocatorFree(bn_ctx, sizeof(BN_Context));
 }
 
 #endif
