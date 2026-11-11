@@ -81,6 +81,25 @@ extern "C" {
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <math.h>
+
+#include <stdlib.h>
+#include <string.h>
+
+// clang-format off
+#if defined(BN_PLATFORM_WINDOWS)
+    #include <windows.h>
+    #include <io.h>
+
+    #define BN_IS_TERMINAL _isatty(_fileno(stdin))
+#else
+    #include <sys/mman.h>
+    #include <sys/stat.h>
+    #include <unistd.h>
+
+    #define BN_IS_TERMINAL isatty(STDOUT_FILENO)
+#endif
+// clang-format on
 
 typedef int8_t i8;
 typedef int16_t i16;
@@ -232,11 +251,9 @@ typedef struct {
 #define Gib(n) ((u64)(n) * GigaByte)
 
 // clang-format off
-#if defined(BN_ALLOCATOR_BACKEND_MALLOC)
-    // for alignment
-    #ifndef BN_ALLOCATOR_MIN_SIZE
-        #define BN_ALLOCATOR_MIN_SIZE Kib(4)
-    #endif
+// for alignment
+#ifndef BN_ALLOCATOR_MIN_SIZE
+    #define BN_ALLOCATOR_MIN_SIZE Kib(4)
 #endif
 // clang-format on
 
@@ -562,24 +579,6 @@ typedef struct {
 
 #if defined(BN_IMPLEMENTATION)
 
-#include <stdlib.h>
-#include <string.h>
-
-// clang-format off
-#if defined(BN_PLATFORM_WINDOWS)
-    #include <windows.h>
-    #include <io.h>
-
-    #define BN_IS_TERMINAL _isatty(_fileno(stdin))
-#else
-    #include <sys/mman.h>
-    #include <sys/stat.h>
-    #include <unistd.h>
-
-    #define BN_IS_TERMINAL isatty(STDOUT_FILENO)
-#endif
-// clang-format on
-
 #define BN_ANSI_ESC "\e"
 // #define BN_ANSI_ESC "\x1b"
 #define BN_ANSI_CSI BN_ANSI_ESC "["
@@ -880,10 +879,7 @@ BN_Arena* bn_arenaRealloc(BN_Arena* arena, u64 new_pos) {
     }
     // Copy existing data and commit the current committed size
     memcpy(new_arena, arena, arena->commit_pos);
-    // if (!bn_platformMemCommit(new_arena, arena->commit_pos)) {
-    //     bn_platformMemRelease(new_arena, new_reserve_size);
-    //     return NULL;
-    // }
+
     new_arena->reserve_size = new_reserve_size;
     new_arena->commit_size = commit_size;
     new_arena->pos = pos;
@@ -892,13 +888,7 @@ BN_Arena* bn_arenaRealloc(BN_Arena* arena, u64 new_pos) {
     bn_platformMemRelease(arena, arena->reserve_size);
 #elif defined(BN_ALLOCATOR_BACKEND_MALLOC)
     new_reserve_size = bn_alignPow2(new_reserve_size, BN_ALLOCATOR_MIN_SIZE);
-    // BN_Arena* new_arena =
-    //     (BN_Arena*)malloc(new_reserve_size);
-    // bn_assert(new_arena != NULL);
-    //
-    // memcpy(new_arena, arena, arena->commit_pos);
-    //
-    // free(arena);
+
     BN_Arena* new_arena = (BN_Arena*)realloc(arena, new_reserve_size);
 
     new_arena->reserve_size = new_reserve_size;
@@ -974,10 +964,10 @@ BN_Allocator bn_initAllocator(BN_AllocatorInitParams params) {
         break;
     case BN_AllocatorType_ArenaGrowing:
         if (params.reserve_size <= 0) {
-            params.reserve_size = Byte * 8;
+            params.reserve_size = BN_ALLOCATOR_MIN_SIZE;
         }
         if (params.commit_size <= 0) {
-            params.commit_size = Byte * 8;
+            params.commit_size = BN_ALLOCATOR_MIN_SIZE;
         }
 
         alloc.data = bn_initArena(
@@ -992,10 +982,10 @@ BN_Allocator bn_initAllocator(BN_AllocatorInitParams params) {
         break;
     case BN_AllocatorType_TempAllocator:
         if (params.reserve_size <= 0) {
-            params.reserve_size = Byte * 8;
+            params.reserve_size = BN_ALLOCATOR_MIN_SIZE;
         }
         if (params.commit_size <= 0) {
-            params.commit_size = Byte * 8;
+            params.commit_size = BN_ALLOCATOR_MIN_SIZE;
         }
 
         alloc.data = bn_initArena(
@@ -1040,23 +1030,15 @@ void* bn_allocatorPush(BN_AllocatorParams params, BN_Allocator* alloc) {
     switch (alloc->type) {
     case BN_AllocatorType_ArenaStatic:
     case BN_AllocatorType_ArenaGrowing: {
-        // checks reallocation outside the arena push to update the pointer
-        BN_Arena* arena = alloc->data;
-        u64 pos_aligned = bn_alignPow2(arena->pos, BN_ARENA_ALIGN);
-        u64 new_pos = pos_aligned + params.size;
-        if (new_pos > arena->reserve_size) {
-            arena = bn_arenaRealloc(arena, new_pos);
-        }
-        alloc->data = arena;
         return bn_arenaPush(
-            (BN_Arena*)alloc->data, params.size, params.non_zero
+            alloc->data, params.size, params.non_zero
         );
     }
     case BN_AllocatorType_HeapAllocator:
         return bn_heapAllocatorPush(params.size, params.non_zero);
     case BN_AllocatorType_TempAllocator:
         return bn_arenaPush(
-            (BN_Arena*)alloc->_temp.arena, params.size, params.non_zero
+            alloc->_temp.arena, params.size, params.non_zero
         );
     default:
         bn_logPanic("Allocator not initialized");
@@ -1084,13 +1066,13 @@ void bn_allocatorFreeAll(BN_Allocator* alloc) {
     switch (alloc->type) {
     case BN_AllocatorType_ArenaStatic:
     case BN_AllocatorType_ArenaGrowing:
-        bn_arenaPopTo((BN_Arena*)alloc->data, BN_ARENA_BASE_POS);
+        bn_arenaPopTo(alloc->data, BN_ARENA_BASE_POS);
         break;
     case BN_AllocatorType_HeapAllocator:
         break;
     case BN_AllocatorType_TempAllocator:
         bn_endTempArena(alloc->_temp);
-        alloc->_temp = bn_beginTempArena((BN_Arena*)alloc->data);
+        alloc->_temp = bn_beginTempArena(alloc->data);
         break;
     default:
         bn_logPanic("Allocator not initialized");
@@ -1192,8 +1174,6 @@ void bn_hashTableAppend(
     table->items[idx].value = value;
     table->length++;
 }
-
-#include <math.h>
 
 Vec3f32 vec3f32Add(Vec3f32 u, Vec3f32 v) {
     return (Vec3f32){{u.x + v.x, u.y + v.y, u.z + v.z}};
