@@ -373,7 +373,7 @@ typedef struct {
 BN_Arena* bn_initArena(u64 reserve_size, u64 commit_size, BN_ArenaType type);
 void bn_destroyArena(BN_Arena* arena);
 
-void* bn_arenaPush(BN_Arena* arena, u64 size, bool non_zero);
+void* bn_arenaPush(BN_Arena** arena, u64 size, bool non_zero);
 BN_Arena* bn_arenaRealloc(BN_Arena* arena, u64 new_pos);
 void bn_arenaPop(BN_Arena* arena, u64 size);
 void bn_arenaPopTo(BN_Arena* arena, u64 pos);
@@ -813,36 +813,37 @@ void bn_destroyArena(BN_Arena* arena) {
 #endif
 }
 
-void* bn_arenaPush(BN_Arena* arena, u64 size, bool non_zero) {
-    u64 pos_aligned = bn_alignPow2(arena->pos, BN_ARENA_ALIGN);
+void* bn_arenaPush(BN_Arena** arena, u64 size, bool non_zero) {
+    u64 pos_aligned = bn_alignPow2((*arena)->pos, BN_ARENA_ALIGN);
     u64 new_pos = pos_aligned + size;
 
     // Grow arena if needed
-    if (new_pos > arena->reserve_size && arena->type == BN_ArenaType_Growing) {
-        arena = bn_arenaRealloc(arena, new_pos);
+    if (new_pos > (*arena)->reserve_size
+        && (*arena)->type == BN_ArenaType_Growing) {
+        *arena = bn_arenaRealloc(*arena, new_pos);
     }
 
-    if (new_pos > arena->commit_pos) {
+    if (new_pos > (*arena)->commit_pos) {
         u64 new_commit_pos = new_pos;
-        new_commit_pos += arena->commit_size - 1;
-        new_commit_pos -= new_commit_pos % arena->commit_size;
-        new_commit_pos = bn_min(new_commit_pos, arena->reserve_size);
+        new_commit_pos += (*arena)->commit_size - 1;
+        new_commit_pos -= new_commit_pos % (*arena)->commit_size;
+        new_commit_pos = bn_min(new_commit_pos, (*arena)->reserve_size);
 
 #if defined(BN_ALLOCATOR_BACKEND_VIRTUAL_MEMORY)
-        u8* mem = (u8*)arena + arena->commit_pos;
-        u64 commit_size = new_commit_pos - arena->commit_pos;
+        u8* mem = (u8*)*arena + (*arena)->commit_pos;
+        u64 commit_size = new_commit_pos - (*arena)->commit_pos;
 
         if (!bn_platformMemCommit(mem, commit_size)) {
             return NULL;
         }
 #endif
 
-        arena->commit_pos = new_commit_pos;
+        (*arena)->commit_pos = new_commit_pos;
     }
 
-    arena->pos = new_pos;
+    (*arena)->pos = new_pos;
 
-    u8* out = (u8*)arena + pos_aligned;
+    u8* out = (u8*)*arena + pos_aligned;
 
     if (!non_zero) {
         memset(out, 0, size);
@@ -992,7 +993,7 @@ BN_Allocator bn_initAllocator(BN_AllocatorInitParams params) {
             params.reserve_size, params.commit_size, BN_ArenaType_Growing
         );
         alloc.type = params.type;
-        alloc._temp = bn_beginTempArena((BN_Arena*)alloc.data);
+        alloc._temp = bn_beginTempArena(alloc.data);
         break;
     default:
         bn_logPanic("Allocator not implemented");
@@ -1030,16 +1031,12 @@ void* bn_allocatorPush(BN_AllocatorParams params, BN_Allocator* alloc) {
     switch (alloc->type) {
     case BN_AllocatorType_ArenaStatic:
     case BN_AllocatorType_ArenaGrowing: {
-        return bn_arenaPush(
-            alloc->data, params.size, params.non_zero
-        );
+        return bn_arenaPush((BN_Arena**)&alloc->data, params.size, params.non_zero);
     }
     case BN_AllocatorType_HeapAllocator:
         return bn_heapAllocatorPush(params.size, params.non_zero);
     case BN_AllocatorType_TempAllocator:
-        return bn_arenaPush(
-            alloc->_temp.arena, params.size, params.non_zero
-        );
+        return bn_arenaPush((BN_Arena**)&alloc->_temp.arena, params.size, params.non_zero);
     default:
         bn_logPanic("Allocator not initialized");
         return NULL;
@@ -1066,13 +1063,13 @@ void bn_allocatorFreeAll(BN_Allocator* alloc) {
     switch (alloc->type) {
     case BN_AllocatorType_ArenaStatic:
     case BN_AllocatorType_ArenaGrowing:
-        bn_arenaPopTo(alloc->data, BN_ARENA_BASE_POS);
+        bn_arenaPopTo((BN_Arena*)alloc->data, BN_ARENA_BASE_POS);
         break;
     case BN_AllocatorType_HeapAllocator:
         break;
     case BN_AllocatorType_TempAllocator:
         bn_endTempArena(alloc->_temp);
-        alloc->_temp = bn_beginTempArena(alloc->data);
+        alloc->_temp = bn_beginTempArena((BN_Arena*)alloc->data);
         break;
     default:
         bn_logPanic("Allocator not initialized");
