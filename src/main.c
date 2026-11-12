@@ -4,36 +4,18 @@
 #include "utils.h"
 #include "interval.h"
 #include "ray.h"
+#include "camera.h"
 
 /*
    https://raytracing.github.io/books/RayTracingInOneWeekend.html
 
-   stoped at: 7. Moving Camera Code Into Its Own Class
+   stoped at: 8. Antialiasing
 */
-
-void writeColor(FILE* f_ptr, Color* pixel_color) {
-    f32 r = pixel_color->r;
-    f32 g = pixel_color->g;
-    f32 b = pixel_color->b;
-
-    i32 rb = (i32)(255.999 * r);
-    i32 gb = (i32)(255.999 * g);
-    i32 bb = (i32)(255.999 * b);
-
-    fprintf(f_ptr, "%d %d %d\n", rb, gb, bb);
-}
 
 int main(void) {
     BN_Allocator allocator = bn_initAllocator((BN_AllocatorInitParams) {
         .type = BN_AllocatorType_ArenaGrowing,
     });
-    // image
-    f32 aspect_ratio = 16.0 / 9.0;
-    i32 img_width = 400;
-
-    // Calculate the image height, and ensure that it's at least 1.
-    i32 img_height = (i32)(img_width / aspect_ratio);
-    img_height = (img_height < 1) ? 1 : img_height;
 
     // World
     BN_arrayHitRecord world = bn_daInit();
@@ -52,66 +34,12 @@ int main(void) {
     };
     bn_daAppend(&world, sphere, &allocator);
 
-    // Camera
-    f32 focal_length = 1.0;
-    f32 viewport_height = 2.0;
-    f32 viewport_width = viewport_height * ((f32)img_width / img_height);
-    Point3 camera_center = {0};
+    Camera cam = {0};
 
-    // Calculate the vectors across the horizontal and down the vertical
-    // viewport edges.
-    Vec3f32 viewport_u = {.x = viewport_width, .y = 0.0, .z = 0.0};
-    Vec3f32 viewport_v = {.x = 0.0, .y = -viewport_height, .z = 0.0};
+    cam.aspect_ratio = 16.0 / 9.0;
+    cam.img_width = 400;
 
-    // Calculate the horizontal and vertical delta vectors from pixel to pixel.
-    Vec3f32 pixel_delta_u = vec3f32DivScalar(viewport_u, img_width);
-    Vec3f32 pixel_delta_v = vec3f32DivScalar(viewport_v, img_height);
-
-    // Calculate the location of the upper left pixel.
-    Vec3f32 viewport_upper_left = vec3f32Sub(
-        vec3f32Sub(
-            vec3f32Sub(camera_center, (Vec3f32){{0, 0, focal_length}}),
-            vec3f32DivScalar(viewport_u, 2)
-        ),
-        vec3f32DivScalar(viewport_v, 2)
-    );
-
-    Vec3f32 pixel00_loc = vec3f32Add(
-        viewport_upper_left,
-        vec3f32MultScalar(vec3f32Add(pixel_delta_u, pixel_delta_v), 0.5)
-    );
-
-    // render
-    // https://en.wikipedia.org/wiki/Netpbm
-    FILE* f_ptr;
-#if defined(BN_PLATFORM_WINDOWS)
-    fopen_s(&f_ptr, "image.ppm", "w");
-#else
-    f_ptr = fopen("image.ppm", "w");
-#endif
-
-    fprintf(f_ptr, "P3\n");
-    fprintf(f_ptr, "%d %d\n", img_width, img_height);
-    fprintf(f_ptr, "255\n");
-
-    for (i32 j = 0; j < img_height; j++) {
-        i32 pct = (j * 100) / img_height;
-        bn_logInfof("Scanlines remaining: %d (%d%%)", (img_height - j), pct);
-        for (i32 i = 0; i < img_width; i++) {
-            Vec3f32 pixel_center = vec3f32Add(
-                vec3f32Add(pixel00_loc, vec3f32MultScalar(pixel_delta_u, i)),
-                vec3f32MultScalar(pixel_delta_v, j)
-            );
-            Vec3f32 ray_direction = vec3f32Sub(pixel_center, camera_center);
-            Ray r = {camera_center, ray_direction};
-
-            Vec3f32 pixel_color = rayColor(&r, &world);
-            writeColor(f_ptr, &pixel_color);
-        }
-    }
-    bn_logInfof("Done");
-
-    fclose(f_ptr);
+    cameraRender(&cam, &world);
 
     bn_destroyAllocator(&allocator);
     return 0;

@@ -4,9 +4,6 @@
 #include "interval.h"
 #include "utils.h"
 
-typedef Vec3f32 Point3;
-typedef Vec3f32 Color;
-
 typedef struct {
     Point3 origin;
     Vec3f32 direction;
@@ -104,24 +101,4 @@ bool hitRecordHitArray(
     }
 
     return hit_anything;
-}
-
-Color rayColor(Ray* r, BN_arrayHitRecord* world) {
-    HitRecord rec;
-    if (hitRecordHitArray(r, intervalInit(0, infinity), world, &rec)) {
-        return vec3f32MultScalar(
-            vec3f32Add(rec.normal, (Color){.r = 1.0, .g = 1.0, .b = 1.0}), 0.5
-        );
-    }
-
-    Vec3f32 unit_direction = vec3f32UnitVector(r->direction);
-    f32 a = 0.5 * (unit_direction.y + 1.0);
-
-    // “linear blend”, or “linear interpolation”, commonly referred to as a lerp
-    // between two values.
-    // blended_value = (1-a) * start_value + a * end_value
-    return vec3f32Add(
-        vec3f32MultScalar((Color){.x = 1.0, .y = 1.0, .z = 1.0}, (1.0 - a)),
-        vec3f32MultScalar((Color){.x = 0.5, .y = 0.7, .z = 1.0}, a)
-    );
 }

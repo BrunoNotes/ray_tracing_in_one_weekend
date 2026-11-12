@@ -7,6 +7,7 @@ References:
 - nob.h (https://github.com/tsoding/nob.h)
 - odin (https://odin-lang.org)
 - gb.h (https://github.com/gingerBill/gb)
+- MagicalBat (https://www.youtube.com/@Magicalbat)
 
 #define BN_IMPLEMENTATION
 #include "bn.h"
@@ -143,17 +144,19 @@ typedef ptrdiff_t isize;
 #define f64_MIN 2.2250738585072014e-308
 #define f64_MAX 1.7976931348623157e+308
 
+// clang-format off
 #ifndef NULL
-#if defined(__cplusplus)
-#if __cplusplus >= 201103L
-#define NULL nullptr
-#else
-#define NULL 0
+    #if defined(__cplusplus)
+        #if __cplusplus >= 201103L
+            #define NULL nullptr
+        #else
+            #define NULL 0
+        #endif
+    #else
+        #define NULL ((void*)0)
+    #endif
 #endif
-#else
-#define NULL ((void*)0)
-#endif
-#endif
+// clang-format on
 
 #define bn_vec2Prototype(T)                                                    \
     typedef union U_Vec2##T {                                                  \
@@ -818,8 +821,8 @@ void* bn_arenaPush(BN_Arena** arena, u64 size, bool non_zero) {
     u64 new_pos = pos_aligned + size;
 
     // Grow arena if needed
-    if (new_pos > (*arena)->reserve_size
-        && (*arena)->type == BN_ArenaType_Growing) {
+    if (new_pos > (*arena)->reserve_size &&
+        (*arena)->type == BN_ArenaType_Growing) {
         *arena = bn_arenaRealloc(*arena, new_pos);
     }
 
@@ -1031,12 +1034,16 @@ void* bn_allocatorPush(BN_AllocatorParams params, BN_Allocator* alloc) {
     switch (alloc->type) {
     case BN_AllocatorType_ArenaStatic:
     case BN_AllocatorType_ArenaGrowing: {
-        return bn_arenaPush((BN_Arena**)&alloc->data, params.size, params.non_zero);
+        return bn_arenaPush(
+            (BN_Arena**)&alloc->data, params.size, params.non_zero
+        );
     }
     case BN_AllocatorType_HeapAllocator:
         return bn_heapAllocatorPush(params.size, params.non_zero);
     case BN_AllocatorType_TempAllocator:
-        return bn_arenaPush((BN_Arena**)&alloc->_temp.arena, params.size, params.non_zero);
+        return bn_arenaPush(
+            (BN_Arena**)&alloc->_temp.arena, params.size, params.non_zero
+        );
     default:
         bn_logPanic("Allocator not initialized");
         return NULL;
